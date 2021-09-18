@@ -184,8 +184,8 @@ struct InitializeResponse {
 
 // POST /initialize 初期化エンドポイント
 async fn initialize(
-    _: web::Data<sqlx::MySqlPool>,
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
 ) -> actix_web::Result<HttpResponse> {
     let files = ["1_schema.sql", "2_init.sql", "3_sample.sql"];
     for file in files {

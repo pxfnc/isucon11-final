@@ -640,15 +640,17 @@ async fn register_courses(
     .bind(&user_id)
     .fetch_all(&mut tx)
     .await
-        .map_err(SqlxError)?;
+    .map_err(SqlxError)?;
 
-    let registered_courses: HashSet<&String> = sqlx::query_as("SELECT `course_id` FROM `registrations` WHERE `user_id` = ?")
-        .bind(&user_id)
-        .fetch_all(&mut tx)
-        .await
-        .map_err(SqlxError)?
-        .iter()
-        .collect::<HashSet<&String>>();
+    let registered_courses: HashSet<String> =
+        sqlx::query_scalar("SELECT `course_id` FROM `registrations` WHERE `user_id` = ?")
+            .bind(&user_id)
+            .fetch_all(&mut tx)
+            .await
+            .map_err(SqlxError)?
+            .into_iter()
+            .collect();
+    // .collect::<HashSet<String>>();
 
     let mut map: HashMap<DayOfWeek, HashSet<u8>> = HashMap::new();
     for c in already_registered_courses {

@@ -428,6 +428,23 @@ struct Course {
     status: CourseStatus,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct Course2 {
+    id: String,
+    code: String,
+    #[sqlx(rename = "type")]
+    type_: CourseType,
+    name: String,
+    description: String,
+    credit: u8,
+    period: u8,
+    day_of_week: DayOfWeek,
+    teacher_id: String,
+    teacher_name: String,
+    keywords: String,
+    status: CourseStatus,
+}
+
 // ---------- Public API ----------
 
 #[derive(Debug, serde::Deserialize)]
@@ -532,7 +549,7 @@ async fn get_registered_courses(
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
-    let courses: Vec<Course> = sqlx::query_as(concat!(
+    let courses: Vec<Course2> = sqlx::query_as(concat!(
         "SELECT `users`.`name` as `teacher_name`, `courses`.*",
         " FROM `courses`",
         " JOIN `registrations` ON `courses`.`id` = `registrations`.`course_id`",

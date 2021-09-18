@@ -335,7 +335,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for CourseType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash, Clone)]
 #[serde(rename_all = "lowercase")]
 enum DayOfWeek {
     Monday,
@@ -586,6 +586,10 @@ struct RegisterCoursesErrorResponse {
     schedule_conflict: Vec<String>,
 }
 
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::iter::FromIterator;
+
 // PUT /api/users/me/courses 履修登録
 async fn register_courses(
     _: web::Data<sqlx::MySqlPool>,    // replica
@@ -596,11 +600,109 @@ async fn register_courses(
     let (user_id, _, _, _) = get_user_info(session)?;
 
     let mut req = req.into_inner();
-    req.sort_by(|x, y| x.id.cmp(&y.id));
+    // req.sort_by(|x, y| x.id.cmp(&y.id));
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
+    // fetch course_reqs
+    let course_reqs_query_string = format!(
+        "SELECT * FROM `courses` WHERE `id` IN ({}) ORDER BY `courses`.`id` ASC",
+        vec!["?"; req.len()].join(", ")
+    );
+    let mut course_reqs_query = sqlx::query_as(&course_reqs_query_string);
+    for course_req in req.iter() {
+        course_reqs_query = course_reqs_query.bind(&course_req.id);
+    }
+    let course_reqs: Vec<Course> = course_reqs_query
+        .fetch_all(&mut tx)
+        .await
+        .map_err(SqlxError)?;
+
     let mut errors = RegisterCoursesErrorResponse::default();
+    // not found id
+    // let found_ids: HashSet<String> = HashSet::from_iter(course_reqs.iter().map(|c| c.id.clone()));
+    let found_ids = course_reqs.iter().map(|c| &c.id).collect::<HashSet<_>>();
+    for r in req.iter().filter(|r| !found_ids.contains(&r.id)) {
+        errors.course_not_found.push(r.id.clone());
+    }
+
+    // not registrable
+    for c in course_reqs
+        .iter()
+        .filter(|c| c.status != CourseStatus::Registration)
+    {
+        errors.not_registrable_status.push(c.id.clone());
+    }
+
+    let registrable_courses: Vec<&Course> = course_reqs
+        .iter()
+        .filter(|c| c.status == CourseStatus::Registration)
+        .collect();
+    let already_registered_courses: Vec<Course> = sqlx::query_as(concat!(
+        "SELECT `courses`.*",
+        " FROM `courses`",
+        " JOIN `registrations` ON `courses`.`id` = `registrations`.`course_id`",
+        " WHERE `courses`.`status` IN (?, ?) AND `registrations`.`user_id` = ?",
+    ))
+    .bind(CourseStatus::Registration)
+    .bind(CourseStatus::InProgress)
+    .bind(&user_id)
+    .fetch_all(&mut tx)
+    .await
+    .map_err(SqlxError)?;
+
+    let registered_courses: HashSet<String> =
+        sqlx::query_scalar("SELECT `course_id` FROM `registrations` WHERE `user_id` = ?")
+            .bind(&user_id)
+            .fetch_all(&mut tx)
+            .await
+            .map_err(SqlxError)?
+            .into_iter()
+            .collect();
+    // .collect::<HashSet<String>>();
+
+    let mut map: HashMap<DayOfWeek, HashMap<u8, u32>> = HashMap::new();
+    for c in already_registered_courses.iter() {
+        let mut m = map.entry(c.day_of_week.clone()).or_insert(HashMap::new());
+        m.insert(c.period, m.get(&c.period).unwrap_or(&0) + 1);
+    }
+    for c in registrable_courses.iter() {
+        let mut m = map.entry(c.day_of_week.clone()).or_insert(HashMap::new());
+        m.insert(c.period, m.get(&c.period).unwrap_or(&0) + 1);
+    }
+
+    let mut newly_added: Vec<&Course> = Vec::new();
+    for c in registrable_courses {
+        if registered_courses.contains(&c.id) {
+            continue;
+        }
+        if map
+            .get(&c.day_of_week)
+            .map(|s| s.get(&c.period).unwrap_or(&0) > &1)
+            .unwrap_or(false)
+        {
+            errors.schedule_conflict.push(c.id.to_owned());
+        } else {
+            newly_added.push(c);
+        }
+    }
+
+    if !errors.course_not_found.is_empty()
+        || !errors.not_registrable_status.is_empty()
+        || !errors.schedule_conflict.is_empty()
+    {
+        return Ok(HttpResponse::BadRequest().json(errors));
+    }
+
+    for course in newly_added {
+        sqlx::query("INSERT INTO `registrations` (`course_id`, `user_id`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `course_id` = VALUES(`course_id`), `user_id` = VALUES(`user_id`)")
+            .bind(&course.id)
+            .bind(&user_id)
+            .execute(&mut tx)
+            .await
+            .map_err(SqlxError)?;
+    }
+    /*
     let mut newly_added = Vec::new();
     for course_req in req {
         let course: Option<Course> = isucholar::db::fetch_optional_as(
@@ -678,7 +780,7 @@ async fn register_courses(
             .await
             .map_err(SqlxError)?;
     }
-
+    */
     tx.commit().await.map_err(SqlxError)?;
 
     Ok(HttpResponse::Ok().finish())

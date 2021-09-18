@@ -597,7 +597,7 @@ async fn register_courses(
 
     // fetch course_reqs
     let course_reqs_query_string = format!(
-        "SELECT * FROM `courses` WHERE `id` IN ({}) ORDER BY `cources`.`id` ASC",
+        "SELECT * FROM `courses` WHERE `id` IN ({}) ORDER BY `courses`.`id` ASC",
         vec!["?"; req.len()].join(", ")
     );
     let mut course_reqs_query = sqlx::query_as(&course_reqs_query_string);

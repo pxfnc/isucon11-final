@@ -1719,7 +1719,7 @@ async fn create_submissions_zip(
     }
 
     // -i 'tmp_dir/*': 空zipを許す
-    tokio::process::Command::new("zip")
+    tokio::process::Command::new("pigz")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

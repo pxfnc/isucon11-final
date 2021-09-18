@@ -886,11 +886,11 @@ async fn get_grades(
     .map_err(SqlxError)?;
     let mut submissions_count_map: HashMap<String, i64> = HashMap::new();
     for c in submissions_count.iter() {
-        let mut m = submissions_count_map.entry(c.0.clone()).or_insert(0);
+        let m = submissions_count_map.entry(c.0.clone()).or_insert(0);
         *m = c.1;
     }
 
-    let my_score: Vec<(String, u8)> = sqlx::query_as(concat!(
+    let my_score: Vec<(String, Option<u8>)> = sqlx::query_as(concat!(
         " SELECT `class_id`, `score`",
         " FROM `submissions`",
         " WHERE `user_id` = ?"
@@ -899,12 +899,7 @@ async fn get_grades(
     .fetch_all(pool.as_ref())
     .await
     .map_err(SqlxError)?;
-    let mut my_score_map: HashMap<String, u8> = HashMap::new();
-    for c in my_score.iter() {
-        let mut m = my_score_map.entry(c.0.clone()).or_insert(0);
-        *m = c.1;
-    }
-
+    let mut my_score_map: HashMap<String, Option<u8>> = HashMap::from_iter(my_score);
 
     for course in registered_courses {
         // 講義一覧の取得
@@ -923,8 +918,8 @@ async fn get_grades(
         let mut my_total_score = 0;
         for class in classes {
             let submissions_count: i64 = submissions_count_map.get(&class.id).cloned().unwrap();
-            let my_score: Option<&u8> = my_score_map.get(&class.id);
-            if let Some(my_score) = my_score.cloned() {
+            let my_score: Option<u8> = my_score_map.get(&class.id).cloned().flatten();
+            if let Some(my_score) = my_score {
                 let my_score = my_score as i64;
                 my_total_score += my_score;
                 class_scores.push(ClassScore {
@@ -944,48 +939,47 @@ async fn get_grades(
                 });
             }
         }
-
 
         // 講義毎の成績計算処理
         /*
-       for class in classes {
-            let submissions_count: i64 =
-                sqlx::query_scalar("SELECT COUNT(*) FROM `submissions` WHERE `class_id` = ?")
-                    .bind(&class.id)
-                    .fetch_one(pool.as_ref())
-                    .await
-                    .map_err(SqlxError)?;
+        for class in classes {
+             let submissions_count: i64 =
+                 sqlx::query_scalar("SELECT COUNT(*) FROM `submissions` WHERE `class_id` = ?")
+                     .bind(&class.id)
+                     .fetch_one(pool.as_ref())
+                     .await
+                     .map_err(SqlxError)?;
 
-            let my_score: Option<Option<u8>> = sqlx::query_scalar(concat!(
-                "SELECT `submissions`.`score` FROM `submissions`",
-                " WHERE `user_id` = ? AND `class_id` = ?"
-            ))
-            .bind(&user_id)
-            .bind(&class.id)
-            .fetch_optional(pool.as_ref())
-            .await
-            .map_err(SqlxError)?;
-            if let Some(Some(my_score)) = my_score {
-                let my_score = my_score as i64;
-                my_total_score += my_score;
-                class_scores.push(ClassScore {
-                    class_id: class.id,
-                    part: class.part,
-                    title: class.title,
-                    score: Some(my_score),
-                    submitters: submissions_count,
-                });
-            } else {
-                class_scores.push(ClassScore {
-                    class_id: class.id,
-                    part: class.part,
-                    title: class.title,
-                    score: None,
-                    submitters: submissions_count,
-                });
-            }
-        }
-        */
+             let my_score: Option<Option<u8>> = sqlx::query_scalar(concat!(
+                 "SELECT `submissions`.`score` FROM `submissions`",
+                 " WHERE `user_id` = ? AND `class_id` = ?"
+             ))
+             .bind(&user_id)
+             .bind(&class.id)
+             .fetch_optional(pool.as_ref())
+             .await
+             .map_err(SqlxError)?;
+             if let Some(Some(my_score)) = my_score {
+                 let my_score = my_score as i64;
+                 my_total_score += my_score;
+                 class_scores.push(ClassScore {
+                     class_id: class.id,
+                     part: class.part,
+                     title: class.title,
+                     score: Some(my_score),
+                     submitters: submissions_count,
+                 });
+             } else {
+                 class_scores.push(ClassScore {
+                     class_id: class.id,
+                     part: class.part,
+                     title: class.title,
+                     score: None,
+                     submitters: submissions_count,
+                 });
+             }
+         }
+         */
 
         // この科目を履修している学生のtotal_score一覧を取得
         let mut rows = sqlx::query_scalar(concat!(
@@ -1542,8 +1536,7 @@ async fn submit_assignment(
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
     let status: Option<CourseStatus> = isucholar::db::fetch_optional_scalar(
-        sqlx::query_scalar("SELECT `status` FROM `courses` WHERE `id` = ?")
-            .bind(course_id),
+        sqlx::query_scalar("SELECT `status` FROM `courses` WHERE `id` = ?").bind(course_id),
         &mut tx,
     )
     .await

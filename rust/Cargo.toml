@@ -16,7 +16,7 @@ env_logger = "0.9"
 futures = "0.3"
 lazy_static = "1"
 listenfd = "0.3"
-log = "0.4"
+log = { version = "0.4", features = ["max_level_off"] }
 mime = "0.3"
 num-traits = "0.2"
 serde = { version = "1", features = ["derive"] }

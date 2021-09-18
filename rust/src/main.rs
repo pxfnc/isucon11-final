@@ -322,7 +322,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for CourseType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash, Clone)]
 #[serde(rename_all = "lowercase")]
 enum DayOfWeek {
     Monday,
@@ -653,10 +653,13 @@ async fn register_courses(
     // .collect::<HashSet<String>>();
 
     let mut map: HashMap<DayOfWeek, HashMap<u8, u32>> = HashMap::new();
-    for c in already_registered_courses.iter().chain(registrable_courses.iter()) {
-        let mut m = map.entry(c.day_of_week.cloned())
-            .or_insert(HashMap::new());
-        m.insert(c.period, m.get(&c.period).or_else(0) + 1);
+    for c in already_registered_courses.iter() {
+        let mut m = map.entry(c.day_of_week.clone()).or_insert(HashMap::new());
+        m.insert(c.period, m.get(&c.period).unwrap_or(&0) + 1);
+    }
+    for c in registrable_courses.iter() {
+        let mut m = map.entry(c.day_of_week.clone()).or_insert(HashMap::new());
+        m.insert(c.period, m.get(&c.period).unwrap_or(&0) + 1);
     }
 
     let mut newly_added: Vec<&Course> = Vec::new();
@@ -666,8 +669,8 @@ async fn register_courses(
         }
         if map
             .get(&c.day_of_week)
-            .map(|s| s.get(&c.period).or_else(0) > 1)
-            .or_else(false)
+            .map(|s| s.get(&c.period).unwrap_or(&0) > &1)
+            .unwrap_or(false)
         {
             errors.schedule_conflict.push(c.id.to_owned());
         } else {

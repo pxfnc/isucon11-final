@@ -1941,10 +1941,14 @@ async fn add_announcement(
     .await
     .map_err(SqlxError)?;
 
+    // VALUES (? ,?), (?, ?), ...
     let query_str = format!(
         "INSERT INTO `unread_announcements` (`announcement_id`, `user_id`) VALUES {}",
         vec!["(?, ?)"; targets.len()].join(", ")
     );
+
+    println!("{}", query_str);
+
     let mut query = sqlx::query(&query_str);
     for user in targets.iter() {
         query = query.bind(&req.id).bind(&user.id);

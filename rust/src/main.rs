@@ -660,7 +660,7 @@ async fn register_courses(
     }
 
     let mut newly_added: Vec<&Course> = Vec::new();
-    for c1 in registrable_courses {
+    for c in registrable_courses {
         if registered_courses.contains(&c.id) {
             continue;
         }

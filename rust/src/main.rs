@@ -1397,7 +1397,7 @@ async fn add_class(
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
     let course: Option<Course> = isucholar::db::fetch_optional_as(
-        sqlx::query_as("SELECT * FROM `courses` WHERE `id` = ? FOR SHARE").bind(course_id),
+        sqlx::query_as("SELECT * FROM `courses` WHERE `id` = ?").bind(course_id),
         &mut tx,
     )
     .await
@@ -1477,7 +1477,7 @@ async fn submit_assignment(
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
     let status: Option<CourseStatus> = isucholar::db::fetch_optional_scalar(
-        sqlx::query_scalar("SELECT `status` FROM `courses` WHERE `id` = ? FOR SHARE")
+        sqlx::query_scalar("SELECT `status` FROM `courses` WHERE `id` = ?")
             .bind(course_id),
         &mut tx,
     )
@@ -1510,7 +1510,7 @@ async fn submit_assignment(
     }
 
     let submission_closed: Option<bool> = isucholar::db::fetch_optional_scalar(
-        sqlx::query_scalar("SELECT `submission_closed` FROM `classes` WHERE `id` = ? FOR SHARE")
+        sqlx::query_scalar("SELECT `submission_closed` FROM `classes` WHERE `id` = ?")
             .bind(class_id),
         &mut tx,
     )
@@ -1589,7 +1589,7 @@ async fn register_scores(
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
     let submission_closed: Option<bool> = isucholar::db::fetch_optional_scalar(
-        sqlx::query_scalar("SELECT `submission_closed` FROM `classes` WHERE `id` = ? FOR SHARE")
+        sqlx::query_scalar("SELECT `submission_closed` FROM `classes` WHERE `id` = ?")
             .bind(class_id),
         &mut tx,
     )

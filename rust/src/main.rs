@@ -578,6 +578,10 @@ struct RegisterCoursesErrorResponse {
     schedule_conflict: Vec<String>,
 }
 
+use std::collections::HashSet;
+use std::collections::HashMap;
+use std::iter::FromIterator;
+
 // PUT /api/users/me/courses 履修登録
 async fn register_courses(
     pool: web::Data<sqlx::MySqlPool>,
@@ -591,6 +595,69 @@ async fn register_courses(
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
+    // fetch course_reqs
+    let course_reqs_query_string = format!("SELECT * FROM `courses` WHERE `id` IN ({})", vec!["?", req.len()].join(", "));
+    let mut course_reqs_query = sqlx::query_as(&course_reqs_query_string);
+    for course_req in req {
+        course_reqs_query = course_reqs_query.bind(&course_req.id);
+    }
+    let course_reqs: Vec<Course> = course_reqs_query.fetch_all(&mut tx).await.map_err(SqlxError)?;
+
+    // not found id
+    let found_ids = HashSet::from_iter(course_reqs.iter().map(|c| c.id).cloned());
+    for r in req.iter().filter(|r| ! found_ids.contains(&r.id)) {
+        errors.course_not_found.push(r.id.clone());
+    }
+
+    // not registrable
+    for c in course_reqs.iter().filter(|c| c.status != CourseStatus::Registration) {
+        errors.not_registrable_status.push(c.id.clone());
+    }
+
+    let registrable_courses: Vec<Course> = course_reqs.iter().filter(|c| c.status == CourseStatus::Registration).collect();
+    let already_registered_courses: Vec<Course> = sqlx::query_as(concat!(
+          "SELECT `courses`.*",
+          " FROM `courses`",
+          " JOIN `registrations` ON `courses`.`id` = `registrations`.`course_id`",
+          " WHERE `courses`.`status` IN (?, ?) AND `registrations`.`user_id` = ?",
+        ))
+        .bind(CourseStatus::Registration)
+        .bind(CourseStatus::InProgress)
+        .bind(&user_id)
+        .fetch_all(&mut tx)
+        .await
+        .map_err(SqlxError)?;
+
+    let mut map: HashMap<DayOfWeek, HashSet<u8>> = HashMap::new();
+    for c in already_registered_courses {
+        map.entry(c.day_of_week).or_insert(HashSet::new()) += c.period;
+    }
+
+    let mut newly_added: Vec<Course> = Vec::new();
+    for c in registrable_courses.iter() {
+        if map.get(&c.day_of_week).map(|s| s.contains(&c.period)).unwrap_or(false) {
+            errors.schedule_conflict.push(c.id.to_owned());
+        } else {
+            newly_added.push(c.cloned());
+        }
+    }
+
+    if !errors.course_not_found.is_empty()
+        || !errors.not_registrable_status.is_empty()
+        || !errors.schedule_conflict.is_empty()
+    {
+        return Ok(HttpResponse::BadRequest().json(errors));
+    }
+
+    for course in newly_added {
+        sqlx::query("INSERT INTO `registrations` (`course_id`, `user_id`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `course_id` = VALUES(`course_id`), `user_id` = VALUES(`user_id`)")
+            .bind(course.id)
+            .bind(&user_id)
+            .execute(&mut tx)
+            .await
+            .map_err(SqlxError)?;
+    }
+    /*
     let mut errors = RegisterCoursesErrorResponse::default();
     let mut newly_added = Vec::new();
     for course_req in req {
@@ -669,7 +736,7 @@ async fn register_courses(
             .await
             .map_err(SqlxError)?;
     }
-
+    */
     tx.commit().await.map_err(SqlxError)?;
 
     Ok(HttpResponse::Ok().finish())

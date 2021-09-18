@@ -14,7 +14,8 @@ CREATE TABLE `users`
     `code`            CHAR(6) UNIQUE              NOT NULL,
     `name`            VARCHAR(255)                NOT NULL,
     `hashed_password` BINARY(60)                  NOT NULL,
-    `type`            ENUM ('student', 'teacher') NOT NULL
+    `type`            ENUM ('student', 'teacher') NOT NULL,
+    INDEX `code_index` (`code`)
 );
 
 CREATE TABLE `courses`
@@ -51,6 +52,7 @@ CREATE TABLE `classes`
     `description`       TEXT             NOT NULL,
     `submission_closed` TINYINT(1)       NOT NULL DEFAULT false,
     UNIQUE KEY `idx_classes_course_id_part` (`course_id`, `part`),
+    INDEX `cource_id_index` (`course_id`),
     CONSTRAINT FK_classes_course_id FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
 );
 

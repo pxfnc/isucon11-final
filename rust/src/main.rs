@@ -435,6 +435,23 @@ struct Course {
     status: CourseStatus,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct Course2 {
+    id: String,
+    code: String,
+    #[sqlx(rename = "type")]
+    type_: CourseType,
+    name: String,
+    description: String,
+    credit: u8,
+    period: u8,
+    day_of_week: DayOfWeek,
+    teacher_id: String,
+    teacher_name: String,
+    keywords: String,
+    status: CourseStatus,
+}
+
 // ---------- Public API ----------
 
 #[derive(Debug, serde::Deserialize)]
@@ -534,10 +551,11 @@ async fn get_registered_courses(
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
-    let courses: Vec<Course> = sqlx::query_as(concat!(
-        "SELECT `courses`.*",
+    let courses: Vec<Course2> = sqlx::query_as(concat!(
+        "SELECT `users`.`name` as `teacher_name`, `courses`.*",
         " FROM `courses`",
         " JOIN `registrations` ON `courses`.`id` = `registrations`.`course_id`",
+        " JOIN `users` ON `courses`.`teacher_id` = `users`.`id`",
         " WHERE `courses`.`status` IN (?, ?) AND `registrations`.`user_id` = ?",
     ))
     .bind(CourseStatus::Registration)
@@ -550,17 +568,10 @@ async fn get_registered_courses(
     // 履修科目が0件の時は空配列を返却
     let mut res = Vec::with_capacity(courses.len());
     for course in courses {
-        let teacher: User = isucholar::db::fetch_one_as(
-            sqlx::query_as("SELECT * FROM `users` WHERE `id` = ?").bind(&course.teacher_id),
-            &mut tx,
-        )
-        .await
-        .map_err(SqlxError)?;
-
         res.push(GetRegisteredCourseResponseContent {
             id: course.id,
             name: course.name,
-            teacher: teacher.name,
+            teacher: course.teacher_name,
             period: course.period,
             day_of_week: course.day_of_week,
         });

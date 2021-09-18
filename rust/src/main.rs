@@ -528,7 +528,7 @@ struct GetMeResponse {
 
 // GET /api/users/me 自身の情報を取得
 async fn get_me(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,
     session: actix_session::Session,
 ) -> actix_web::Result<HttpResponse> {
     let (_user_id, user_name, is_admin, user_code) = get_user_info(session)?;
@@ -1275,7 +1275,8 @@ struct SetCourseStatusRequest {
 
 // PUT /api/courses/{course_id}/status 科目のステータスを変更
 async fn set_course_status(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     course_id: web::Path<(String,)>,
     req: web::Json<SetCourseStatusRequest>,
 ) -> actix_web::Result<HttpResponse> {
@@ -1587,7 +1588,8 @@ struct Score {
 
 // PUT /api/courses/{course_id}/classes/{class_id}/assignments/scores 採点結果登録
 async fn register_scores(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     path: web::Path<AssignmentPath>,
     req: web::Json<Vec<Score>>,
 ) -> actix_web::Result<HttpResponse> {
@@ -1975,7 +1977,8 @@ struct AnnouncementDetail {
 
 // GET /api/announcements/{announcement_id} お知らせ詳細取得
 async fn get_announcement_detail(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     session: actix_session::Session,
     announcement_id: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse> {

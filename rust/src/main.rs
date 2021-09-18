@@ -225,7 +225,9 @@ async fn initialize(
     Ok(HttpResponse::Ok().json(InitializeResponse { language: "rust" }))
 }
 
-fn get_user_info(session: actix_session::Session) -> actix_web::Result<(String, String, bool, String)> {
+fn get_user_info(
+    session: actix_session::Session,
+) -> actix_web::Result<(String, String, bool, String)> {
     let user_id = session.get("userID")?;
     if user_id.is_none() {
         return Err(actix_web::error::ErrorInternalServerError(
@@ -251,7 +253,12 @@ fn get_user_info(session: actix_session::Session) -> actix_web::Result<(String, 
             "failed to get isAdmin from session",
         ));
     }
-    Ok((user_id.unwrap(), user_name.unwrap(), is_admin.unwrap(), user_code.unwrap()))
+    Ok((
+        user_id.unwrap(),
+        user_name.unwrap(),
+        is_admin.unwrap(),
+        user_code.unwrap(),
+    ))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1934,16 +1941,22 @@ async fn add_announcement(
     .await
     .map_err(SqlxError)?;
 
-    for user in targets {
-        sqlx::query(
-            "INSERT INTO `unread_announcements` (`announcement_id`, `user_id`) VALUES (?, ?)",
-        )
-        .bind(&req.id)
-        .bind(user.id)
-        .execute(&mut tx)
-        .await
-        .map_err(SqlxError)?;
+    let targets_len = targets.len();
+
+    if targets_len == 0 {
+        return Ok(HttpResponse::Created().finish());
     }
+
+    let query_str = format!(
+        "INSERT INTO `unread_announcements` (`announcement_id`, `user_id`) VALUES {}",
+        vec!["(?, ?)"; targets_len].join(", ")
+    );
+
+    let mut query = sqlx::query(&query_str);
+    for user in targets.iter() {
+        query = query.bind(&req.id).bind(&user.id);
+    }
+    query.execute(&mut tx).await.map_err(SqlxError)?;
 
     tx.commit().await.map_err(SqlxError)?;
 

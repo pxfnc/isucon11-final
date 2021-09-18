@@ -876,14 +876,18 @@ async fn get_grades(
     let mut my_gpa = 0f64;
     let mut my_credits = 0;
 
-    let submissions_count: Vec<(String, i64)> = sqlx::query_as(concat!(
-        " SELECT `class_id`, COUNT(*)",
-        " FROM `submissions`",
-        " GROUP BY `class_id`"
-    ))
-    .fetch_all(pool.as_ref())
-    .await
-    .map_err(SqlxError)?;
+    let query_string = format!(
+        "SELECT `class_id`, COUNT(*) FROM `submissions` WHERE `class_id` IN ({}) GROUP BY `class_id`",
+        vec!["?"; registered_courses.len()].join(", ")
+    );
+    let mut query = sqlx::query_as(&query_string);
+    for c in registered_courses.iter() {
+        query = query.bind(&c.id);
+    }
+    let submissions_count: Vec<(String, i64)> = query
+        .fetch_all(pool.as_ref())
+        .await
+        .map_err(SqlxError)?;
     let mut submissions_count_map: HashMap<String, i64> = HashMap::new();
     for c in submissions_count.iter() {
         let m = submissions_count_map.entry(c.0.clone()).or_insert(0);

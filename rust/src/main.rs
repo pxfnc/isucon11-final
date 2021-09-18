@@ -652,22 +652,22 @@ async fn register_courses(
             .collect();
     // .collect::<HashSet<String>>();
 
-    let mut map: HashMap<DayOfWeek, HashSet<u8>> = HashMap::new();
-    for c in already_registered_courses {
-        map.entry(c.day_of_week)
-            .or_insert(HashSet::new())
-            .insert(c.period);
+    let mut map: HashMap<DayOfWeek, HashMap<u8, u32>> = HashMap::new();
+    for c in already_registered_courses.iter().chain(registrable_courses.iter()) {
+        let mut m = map.entry(c.day_of_week.cloned())
+            .or_insert(HashMap::new());
+        m.insert(c.period, m.get(&c.period).or_else(0) + 1);
     }
 
     let mut newly_added: Vec<&Course> = Vec::new();
-    for c in registrable_courses {
+    for c1 in registrable_courses {
         if registered_courses.contains(&c.id) {
             continue;
         }
         if map
             .get(&c.day_of_week)
-            .map(|s| s.contains(&c.period))
-            .unwrap_or(false)
+            .map(|s| s.get(&c.period).or_else(0) > 1)
+            .or_else(false)
         {
             errors.schedule_conflict.push(c.id.to_owned());
         } else {

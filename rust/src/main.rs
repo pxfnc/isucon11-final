@@ -875,6 +875,36 @@ async fn get_grades(
     let mut course_results = Vec::with_capacity(registered_courses.len());
     let mut my_gpa = 0f64;
     let mut my_credits = 0;
+
+    let submissions_count: Vec<(String, i64)> = sqlx::query_as(concat!(
+        " SELECT `class_id`, COUNT(*)",
+        " FROM `submissions`"
+    ))
+    .fetch_all(pool.as_ref())
+    .await
+    .map_err(SqlxError)?;
+    let mut submissions_count_map: HashMap<String, i64> = HashMap::new();
+    for c in submissions_count.iter() {
+        let mut m = submissions_count_map.entry(c.0.clone()).or_insert(0);
+        *m = c.1;
+    }
+
+    let my_score: Vec<(String, i64)> = sqlx::query_as(concat!(
+        " SELECT `class_id`, `score`",
+        " FROM `submissions`",
+        " WHERE `user_id` = ?"
+    ))
+    .bind(&user_id)
+    .fetch_all(pool.as_ref())
+    .await
+    .map_err(SqlxError)?;
+    let mut my_score_map: HashMap<String, i64> = HashMap::new();
+    for c in my_score.iter() {
+        let mut m = my_score_map.entry(c.0.clone()).or_insert(0);
+        *m = c.1;
+    }
+
+
     for course in registered_courses {
         // 講義一覧の取得
         let classes: Vec<Class> = sqlx::query_as(concat!(
@@ -888,10 +918,35 @@ async fn get_grades(
         .await
         .map_err(SqlxError)?;
 
-        // 講義毎の成績計算処理
         let mut class_scores = Vec::with_capacity(classes.len());
         let mut my_total_score = 0;
         for class in classes {
+            let submissions_count: i64 = submissions_count_map.get(&class.id).cloned().unwrap();
+            let my_score: Option<&i64> = submissions_count_map.get(&class.id);
+            if let Some(my_score) = my_score {
+                my_total_score += my_score;
+                class_scores.push(ClassScore {
+                    class_id: class.id,
+                    part: class.part,
+                    title: class.title,
+                    score: Some(*my_score),
+                    submitters: submissions_count,
+                });
+            } else {
+                class_scores.push(ClassScore {
+                    class_id: class.id,
+                    part: class.part,
+                    title: class.title,
+                    score: None,
+                    submitters: submissions_count,
+                });
+            }
+        }
+
+
+        // 講義毎の成績計算処理
+        /*
+       for class in classes {
             let submissions_count: i64 =
                 sqlx::query_scalar("SELECT COUNT(*) FROM `submissions` WHERE `class_id` = ?")
                     .bind(&class.id)
@@ -928,6 +983,7 @@ async fn get_grades(
                 });
             }
         }
+        */
 
         // この科目を履修している学生のtotal_score一覧を取得
         let mut rows = sqlx::query_scalar(concat!(

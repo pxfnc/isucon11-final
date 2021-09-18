@@ -552,7 +552,7 @@ async fn get_registered_courses(
         res.push(GetRegisteredCourseResponseContent {
             id: course.id,
             name: course.name,
-            teacher: cource.teacher_name,
+            teacher: course.teacher_name,
             period: course.period,
             day_of_week: course.day_of_week,
         });

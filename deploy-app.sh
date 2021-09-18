@@ -10,3 +10,4 @@ cd -
 # サービスの再起動
 sudo systemctl restart isucholar.rust.service
 
+journalctl -f -u isucholar.rust

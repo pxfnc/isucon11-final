@@ -640,7 +640,15 @@ async fn register_courses(
     .bind(&user_id)
     .fetch_all(&mut tx)
     .await
-    .map_err(SqlxError)?;
+        .map_err(SqlxError)?;
+
+    let registered_courses: HashSet<&String> = sqlx::query_as("SELECT `course_id` FROM `registrations` WHERE `user_id` = ?")
+        .bind(&user_id)
+        .fetch_all(&mut tx)
+        .await
+        .map_err(SqlxError)?
+        .iter()
+        .collect::<HashSet<&String>>();
 
     let mut map: HashMap<DayOfWeek, HashSet<u8>> = HashMap::new();
     for c in already_registered_courses {
@@ -651,6 +659,9 @@ async fn register_courses(
 
     let mut newly_added: Vec<&Course> = Vec::new();
     for c in registrable_courses {
+        if registered_courses.contains(&c.id) {
+            continue;
+        }
         if map
             .get(&c.day_of_week)
             .map(|s| s.contains(&c.period))

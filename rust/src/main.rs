@@ -530,9 +530,10 @@ async fn get_registered_courses(
         "SELECT `courses`.*",
         " FROM `courses`",
         " JOIN `registrations` ON `courses`.`id` = `registrations`.`course_id`",
-        " WHERE `courses`.`status` != ? AND `registrations`.`user_id` = ?",
+        " WHERE `courses`.`status` IN (?, ?) AND `registrations`.`user_id` = ?",
     ))
-    .bind(CourseStatus::Closed)
+    .bind(CourseStatus::Registration)
+    .bind(CourseStatus::InProgress)
     .bind(&user_id)
     .fetch_all(&mut tx)
     .await

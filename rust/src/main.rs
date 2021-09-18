@@ -890,7 +890,7 @@ async fn get_grades(
         *m = c.1;
     }
 
-    let my_score: Vec<(String, i64)> = sqlx::query_as(concat!(
+    let my_score: Vec<(String, u8)> = sqlx::query_as(concat!(
         " SELECT `class_id`, `score`",
         " FROM `submissions`",
         " WHERE `user_id` = ?"
@@ -899,7 +899,7 @@ async fn get_grades(
     .fetch_all(pool.as_ref())
     .await
     .map_err(SqlxError)?;
-    let mut my_score_map: HashMap<String, i64> = HashMap::new();
+    let mut my_score_map: HashMap<String, u8> = HashMap::new();
     for c in my_score.iter() {
         let mut m = my_score_map.entry(c.0.clone()).or_insert(0);
         *m = c.1;
@@ -923,14 +923,15 @@ async fn get_grades(
         let mut my_total_score = 0;
         for class in classes {
             let submissions_count: i64 = submissions_count_map.get(&class.id).cloned().unwrap();
-            let my_score: Option<&i64> = submissions_count_map.get(&class.id);
-            if let Some(my_score) = my_score {
+            let my_score: Option<&u8> = my_score_map.get(&class.id);
+            if let Some(my_score) = my_score.cloned() {
+                let my_score = my_score as i64;
                 my_total_score += my_score;
                 class_scores.push(ClassScore {
                     class_id: class.id,
                     part: class.part,
                     title: class.title,
-                    score: Some(*my_score),
+                    score: Some(my_score),
                     submitters: submissions_count,
                 });
             } else {

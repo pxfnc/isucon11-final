@@ -13,40 +13,34 @@ const INIT_DATA_DIRECTORY: &str = "../data/";
 const SESSION_NAME: &str = "isucholar_rust";
 const MYSQL_ERR_NUM_DUPLICATE_ENTRY: u16 = 1062;
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info,sqlx=warn"))
-        .init();
-
+async fn new_mysql_pool(env_prefix: &str) -> sqlx::MySqlPool {
+    let host: String = std::env::var(format!("{}_MYSQL_HOSTNAME", env_prefix))
+        .ok()
+        .unwrap_or_else(|| "127.0.0.1".to_owned());
+    let port: u16 = std::env::var(format!("{}_MYSQL_PORT", env_prefix))
+        .ok()
+        .and_then(|port_str| port_str.parse().ok())
+        .unwrap_or(3306);
+    let database: String = std::env::var(format!("{}_MYSQL_DATABASE", env_prefix))
+        .ok()
+        .unwrap_or_else(|| "isucholar".to_owned());
     let mysql_config = sqlx::mysql::MySqlConnectOptions::new()
-        .host(
-            &std::env::var("MYSQL_HOSTNAME")
-                .ok()
-                .unwrap_or_else(|| "127.0.0.1".to_owned()),
-        )
-        .port(
-            std::env::var("MYSQL_PORT")
-                .ok()
-                .and_then(|port_str| port_str.parse().ok())
-                .unwrap_or(3306),
-        )
+        .host(&host)
+        .port(port)
         .username(
-            &std::env::var("MYSQL_USER")
+            &std::env::var(format!("{}_MYSQL_USER", env_prefix))
                 .ok()
                 .unwrap_or_else(|| "isucon".to_owned()),
         )
         .password(
-            &std::env::var("MYSQL_PASS")
+            &std::env::var(format!("{}_MYSQL_PASS", env_prefix))
                 .ok()
                 .unwrap_or_else(|| "isucon".to_owned()),
         )
-        .database(
-            &std::env::var("MYSQL_DATABASE")
-                .ok()
-                .unwrap_or_else(|| "isucholar".to_owned()),
-        )
+        .database(&database)
         .ssl_mode(sqlx::mysql::MySqlSslMode::Disabled);
-    let pool = sqlx::mysql::MySqlPoolOptions::new()
+
+    sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(10)
         .after_connect(|conn| {
             Box::pin(async move {
@@ -56,7 +50,19 @@ async fn main() -> std::io::Result<()> {
         })
         .connect_with(mysql_config)
         .await
-        .expect("failed to connect db");
+        .expect(&format!(
+            "failed to connect db {}:{}/{}",
+            host, port, database
+        ))
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info,sqlx=warn"))
+        .init();
+
+    let source_pool = new_mysql_pool("SOURCE").await;
+    let replica_pool = new_mysql_pool("REPLICA").await;
 
     let mut session_key = b"trapnomura".to_vec();
     session_key.resize(32, 0);
@@ -118,7 +124,7 @@ async fn main() -> std::io::Result<()> {
             .route("/{announcement_id}", web::get().to(get_announcement_detail));
 
         actix_web::App::new()
-            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(source_pool.clone()))
             .wrap(actix_web::middleware::Logger::default())
             .wrap(
                 actix_session::CookieSession::signed(&session_key)

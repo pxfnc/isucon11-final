@@ -899,7 +899,7 @@ async fn get_grades(
     .fetch_all(pool.as_ref())
     .await
     .map_err(SqlxError)?;
-    let mut my_score_map: HashMap<String, Option<u8>> = HashMap::from_iter(my_score);
+    let my_score_map: HashMap<String, Option<u8>> = HashMap::from_iter(my_score);
 
     for course in registered_courses {
         // 講義一覧の取得
@@ -917,7 +917,7 @@ async fn get_grades(
         let mut class_scores = Vec::with_capacity(classes.len());
         let mut my_total_score = 0;
         for class in classes {
-            let submissions_count: i64 = submissions_count_map.get(&class.id).cloned().unwrap();
+            let submissions_count: i64 = submissions_count_map.get(&class.id).cloned().unwrap_or(0);
             let my_score: Option<u8> = my_score_map.get(&class.id).cloned().flatten();
             if let Some(my_score) = my_score {
                 let my_score = my_score as i64;

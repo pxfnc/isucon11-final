@@ -225,7 +225,7 @@ async fn initialize(
     Ok(HttpResponse::Ok().json(InitializeResponse { language: "rust" }))
 }
 
-fn get_user_info(session: actix_session::Session) -> actix_web::Result<(String, String, bool)> {
+fn get_user_info(session: actix_session::Session) -> actix_web::Result<(String, String, bool, String)> {
     let user_id = session.get("userID")?;
     if user_id.is_none() {
         return Err(actix_web::error::ErrorInternalServerError(
@@ -244,7 +244,14 @@ fn get_user_info(session: actix_session::Session) -> actix_web::Result<(String, 
             "failed to get isAdmin from session",
         ));
     }
-    Ok((user_id.unwrap(), user_name.unwrap(), is_admin.unwrap()))
+    let user_code = session.get("userCode")?;
+    if user_code.is_none() {
+        // ほぼ出てないと思うのと、メッセージかえちゃうと影響出そうなので、一旦これコピペで
+        return Err(actix_web::error::ErrorInternalServerError(
+            "failed to get isAdmin from session",
+        ));
+    }
+    Ok((user_id.unwrap(), user_name.unwrap(), is_admin.unwrap(), user_code.unwrap()))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -476,6 +483,7 @@ async fn login(
     session.insert("userID", user.id)?;
     session.insert("userName", user.name)?;
     session.insert("isAdmin", user.type_ == UserType::Teacher)?;
+    session.insert("userCode", user.code)?;
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -499,13 +507,7 @@ async fn get_me(
     pool: web::Data<sqlx::MySqlPool>,
     session: actix_session::Session,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, user_name, is_admin) = get_user_info(session)?;
-
-    let user_code = sqlx::query_scalar("SELECT `code` FROM `users` WHERE `id` = ?")
-        .bind(&user_id)
-        .fetch_one(pool.as_ref())
-        .await
-        .map_err(SqlxError)?;
+    let (_user_id, user_name, is_admin, user_code) = get_user_info(session)?;
 
     Ok(HttpResponse::Ok().json(GetMeResponse {
         code: user_code,
@@ -528,7 +530,7 @@ async fn get_registered_courses(
     pool: web::Data<sqlx::MySqlPool>,
     session: actix_session::Session,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
@@ -591,7 +593,7 @@ async fn register_courses(
     session: actix_session::Session,
     req: web::Json<Vec<RegisterCourseRequestContent>>,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     let mut req = req.into_inner();
     req.sort_by(|x, y| x.id.cmp(&y.id));
@@ -735,7 +737,7 @@ async fn get_grades(
     pool: web::Data<sqlx::MySqlPool>,
     session: actix_session::Session,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     // 履修している科目一覧取得
     let registered_courses: Vec<Course> = sqlx::query_as(concat!(
@@ -1056,7 +1058,7 @@ async fn add_course(
     session: actix_session::Session,
     req: web::Json<AddCourseRequest>,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     let course_id = isucholar::util::new_ulid().await;
     let result = sqlx::query("INSERT INTO `courses` (`id`, `code`, `type`, `name`, `description`, `credit`, `period`, `day_of_week`, `teacher_id`, `keywords`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -1211,7 +1213,7 @@ async fn get_classes(
     session: actix_session::Session,
     course_id: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     let course_id = &course_id.0;
 
@@ -1355,7 +1357,7 @@ async fn submit_assignment(
     path: web::Path<AssignmentPath>,
     mut payload: actix_multipart::Multipart,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     let course_id = &path.course_id;
     let class_id = &path.class_id;
@@ -1642,7 +1644,7 @@ async fn get_announcement_list(
     params: web::Query<GetAnnouncementsQuery>,
     request: actix_web::HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
@@ -1851,7 +1853,7 @@ async fn get_announcement_detail(
     session: actix_session::Session,
     announcement_id: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse> {
-    let (user_id, _, _) = get_user_info(session)?;
+    let (user_id, _, _, _) = get_user_info(session)?;
 
     let announcement_id = &announcement_id.0;
 

@@ -124,6 +124,9 @@ async fn main() -> std::io::Result<()> {
             .route("/{announcement_id}", web::get().to(get_announcement_detail));
 
         actix_web::App::new()
+            // app_dataを追加することで、ハンドラ関数からpoolを受け取れる。ハンドラの１つ目のdataとしてレプリカdbのpoolを渡し
+            .app_data(web::Data::new(replica_pool.clone()))
+            // ハンドラの１つ目のdataとしてソースdbのpoolを渡す
             .app_data(web::Data::new(source_pool.clone()))
             .wrap(actix_web::middleware::Logger::default())
             .wrap(
@@ -180,7 +183,10 @@ struct InitializeResponse {
 }
 
 // POST /initialize 初期化エンドポイント
-async fn initialize(pool: web::Data<sqlx::MySqlPool>) -> actix_web::Result<HttpResponse> {
+async fn initialize(
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
+) -> actix_web::Result<HttpResponse> {
     let files = ["1_schema.sql", "2_init.sql", "3_sample.sql"];
     for file in files {
         let data = tokio::fs::read_to_string(format!("{}{}", SQL_DIRECTORY, file)).await?;
@@ -580,7 +586,8 @@ struct RegisterCoursesErrorResponse {
 
 // PUT /api/users/me/courses 履修登録
 async fn register_courses(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     session: actix_session::Session,
     req: web::Json<Vec<RegisterCourseRequestContent>>,
 ) -> actix_web::Result<HttpResponse> {
@@ -1044,7 +1051,8 @@ struct AddCourseResponse {
 
 // POST /api/courses 新規科目登録
 async fn add_course(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     session: actix_session::Session,
     req: web::Json<AddCourseRequest>,
 ) -> actix_web::Result<HttpResponse> {
@@ -1264,7 +1272,8 @@ struct AddClassResponse {
 
 // POST /api/courses/{course_id}/classes 新規講義(&課題)追加
 async fn add_class(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     course_id: web::Path<(String,)>,
     req: web::Json<AddClassRequest>,
 ) -> actix_web::Result<HttpResponse> {
@@ -1340,7 +1349,8 @@ struct AssignmentPath {
 
 // POST /api/courses/{course_id}/classes/{class_id}/assignments 課題の提出
 async fn submit_assignment(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     session: actix_session::Session,
     path: web::Path<AssignmentPath>,
     mut payload: actix_multipart::Multipart,
@@ -1745,7 +1755,8 @@ struct AddAnnouncementRequest {
 
 // POST /api/announcements 新規お知らせ追加
 async fn add_announcement(
-    pool: web::Data<sqlx::MySqlPool>,
+    _: web::Data<sqlx::MySqlPool>,    // replica
+    pool: web::Data<sqlx::MySqlPool>, // source
     req: web::Json<AddAnnouncementRequest>,
 ) -> actix_web::Result<HttpResponse> {
     let mut tx = pool.begin().await.map_err(SqlxError)?;

@@ -878,7 +878,8 @@ async fn get_grades(
 
     let submissions_count: Vec<(String, i64)> = sqlx::query_as(concat!(
         " SELECT `class_id`, COUNT(*)",
-        " FROM `submissions`"
+        " FROM `submissions`",
+        " GROUP BY `class_id`"
     ))
     .fetch_all(pool.as_ref())
     .await

@@ -591,13 +591,13 @@ async fn register_courses(
     let (user_id, _, _) = get_user_info(session)?;
 
     let mut req = req.into_inner();
-    req.sort_by(|x, y| x.id.cmp(&y.id));
+    // req.sort_by(|x, y| x.id.cmp(&y.id));
 
     let mut tx = pool.begin().await.map_err(SqlxError)?;
 
     // fetch course_reqs
     let course_reqs_query_string = format!(
-        "SELECT * FROM `courses` WHERE `id` IN ({})",
+        "SELECT * FROM `courses` WHERE `id` IN ({}) ORDER BY `cources`.`id` ASC",
         vec!["?"; req.len()].join(", ")
     );
     let mut course_reqs_query = sqlx::query_as(&course_reqs_query_string);
